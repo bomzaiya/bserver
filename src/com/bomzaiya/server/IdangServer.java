@@ -19,157 +19,152 @@ import org.json.JSONObject;
 
 public class IdangServer {
 
-	private static final String SOCKET_REQUEST_CONNECTION = "SOCKET_REQUEST_CONNECTION";
-	private static final String SOCKET_REQUEST_LOGIN = "SOCKET_REQUEST_LOGIN";
-	private static final String SOCKET_REQUEST_END = "SOCKET_REQUEST_END";
+  private static final String SOCKET_REQUEST_CONNECTION = "SOCKET_REQUEST_CONNECTION";
+  private static final String SOCKET_REQUEST_LOGIN = "SOCKET_REQUEST_LOGIN";
+  private static final String SOCKET_REQUEST_END = "SOCKET_REQUEST_END";
 
-	private static final String SOCKET_EVENT = "event";
-	private static final String SOCKET_DATA = "data";
+  private static final String SOCKET_EVENT = "event";
+  private static final String SOCKET_DATA = "data";
 
-	private static final String SOCKET_EVENT_LOGIN = "SOCKET_EVENT_LOGIN";
-	private static final String SOCKET_EVENT_MESSAGE = "SOCKET_EVENT_MESSAGE";
-	private static final String SOCKET_EVENT_CONNECTION = "SOCKET_EVENT_CONNECTION";
-	private static final String SOCKET_EVENT_END = "SOCKET_EVENT_END";
-	private static final String SOCKET_EVENT_CONNECTED = "SOCKET_EVENT_CONNECTED";
-	private static final String SOCKET_EVENT_PINGPONG = "SOCKET_EVENT_PINGPONG";
-	private static final String SOCKET_EVENT_UPDATE = "SOCKET_EVENT_UPDATE";
-	private static final String SOCKET_EVENT_COMMAND = "SOCKET_EVENT_COMMAND";
+  private static final String SOCKET_EVENT_LOGIN = "SOCKET_EVENT_LOGIN";
+  private static final String SOCKET_EVENT_MESSAGE = "SOCKET_EVENT_MESSAGE";
+  private static final String SOCKET_EVENT_CONNECTION = "SOCKET_EVENT_CONNECTION";
+  private static final String SOCKET_EVENT_END = "SOCKET_EVENT_END";
+  private static final String SOCKET_EVENT_CONNECTED = "SOCKET_EVENT_CONNECTED";
+  private static final String SOCKET_EVENT_PINGPONG = "SOCKET_EVENT_PINGPONG";
+  private static final String SOCKET_EVENT_UPDATE = "SOCKET_EVENT_UPDATE";
+  private static final String SOCKET_EVENT_COMMAND = "SOCKET_EVENT_COMMAND";
 
-	private static final int STATE_CONNECTION = 1;
-	private static final int STATE_LOGIN = 2;
-	private static final int STATE_CONNECTED = 3;
-	private static final int STATE_PINGPONG = 4;
-	private static final int STATE_UPDATE = 5;
+  private static final int STATE_CONNECTION = 1;
+  private static final int STATE_LOGIN = 2;
+  private static final int STATE_CONNECTED = 3;
+  private static final int STATE_PINGPONG = 4;
+  private static final int STATE_UPDATE = 5;
 
-	private static int mState = 0;
+  private static int mState = 0;
 
-	public static Charset charset = Charset.forName("UTF-8");
-	public static CharsetEncoder encoder = charset.newEncoder();
-	public static CharsetDecoder decoder = charset.newDecoder();
-	private static boolean mNeedLogin;
+  public static Charset charset = Charset.forName("UTF-8");
+  public static CharsetEncoder encoder = charset.newEncoder();
+  public static CharsetDecoder decoder = charset.newDecoder();
+  private static boolean mNeedLogin;
 
-	@SuppressWarnings("static-access")
-	public static void main(String[] args) throws IOException {
-		IdangServer IdangServer = new IdangServer();
-		IdangServer.Server();
-	}
+  @SuppressWarnings("static-access")
+  public static void main(String[] args) throws IOException {
+    IdangServer IdangServer = new IdangServer();
+    IdangServer.Server();
+  }
 
-	public static void Server() throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate(1024);
-		Selector selector = Selector.open();
+  public static void Server() throws IOException {
+    ByteBuffer buffer = ByteBuffer.allocate(1024);
+    Selector selector = Selector.open();
 
-		ServerSocketChannel server1 = ServerSocketChannel.open();
-		server1.configureBlocking(false);
-		server1.socket().bind(new InetSocketAddress(40000));
-		server1.register(selector, SelectionKey.OP_ACCEPT);
+    for (int i = 0; i < ProductConfig.mPortList.size(); i++) {
+      ServerSocketChannel server = ServerSocketChannel.open();
+      server.configureBlocking(false);
+      server.socket().bind(new InetSocketAddress(ProductConfig.mPortList.get(i)));
+      server.register(selector, SelectionKey.OP_ACCEPT);
+    }
+ 
+    while (true) {
+      selector.select();
+      Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
+      while (iter.hasNext()) {
+        SocketChannel client;
+        SelectionKey key = iter.next();
+        iter.remove();
+        switch (key.readyOps()) {
+        case SelectionKey.OP_ACCEPT:
+          client = ((ServerSocketChannel) key.channel()).accept();
+          client.configureBlocking(false);
+          client.register(selector, SelectionKey.OP_READ);
+          mState = STATE_CONNECTION;
+          break;
 
-		ServerSocketChannel server2 = ServerSocketChannel.open();
-		server2.configureBlocking(false);
-		server2.socket().bind(new InetSocketAddress(40001));
-		server2.register(selector, SelectionKey.OP_ACCEPT);
+        case SelectionKey.OP_READ:
+          client = (SocketChannel) key.channel();
 
-		while (true) {
-			selector.select();
-			Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
-			while (iter.hasNext()) {
-				SocketChannel client;
-				SelectionKey key = iter.next();
-				iter.remove();
-				switch (key.readyOps()) {
-				case SelectionKey.OP_ACCEPT:
-					client = ((ServerSocketChannel) key.channel()).accept();
-					client.configureBlocking(false);
-					client.register(selector, SelectionKey.OP_READ);
-					mState = STATE_CONNECTION;
-					break;
+          buffer.clear();
+          if (client.read(buffer) != -1) {
+            buffer.flip();
+            String line = new String(buffer.array(), buffer.position(), buffer.remaining());
 
-				case SelectionKey.OP_READ:
-					client = (SocketChannel) key.channel();
+            try {
+              JSONObject jsonObject = new JSONObject(line);
+              String event = jsonObject.getString("event");
+              String data = jsonObject.getString("data");
+              System.out.println(event + ":" + data);
+              if (event.equals(SOCKET_REQUEST_CONNECTION)) {
+                mState = STATE_LOGIN;
+                System.out.println(mState + "\r\n");
+                client.register(selector, SelectionKey.OP_WRITE);
+              } else if (event.equals(SOCKET_EVENT_LOGIN)) {
+                mState = STATE_CONNECTED;
+                System.out.println(mState + "\r\n");
+                client.register(selector, SelectionKey.OP_WRITE);
+              } else if (event.equals(SOCKET_EVENT_MESSAGE)) {
+                mState = STATE_UPDATE;
+                System.out.println(mState + "\r\n");
+                client.register(selector, SelectionKey.OP_WRITE);
+              } else if (event.equals(SOCKET_EVENT_COMMAND)) {
+                mState = STATE_UPDATE;
+                System.out.println(mState + "\r\n");
+                client.register(selector, SelectionKey.OP_WRITE);
+              }
+            } catch (JSONException e) {
+            }
 
-					buffer.clear();
-					if (client.read(buffer) != -1) {
-						buffer.flip();
-						String line = new String(buffer.array(),
-								buffer.position(), buffer.remaining());
+          } else {
+            key.cancel();
+          }
 
-						try {
-							JSONObject jsonObject = new JSONObject(line);
-							String event = jsonObject.getString("event");
-							String data = jsonObject.getString("data");
-							System.out.println(event + ":" + data);
-							if (event.equals(SOCKET_REQUEST_CONNECTION)) {
-								mState = STATE_LOGIN;
-								System.out.println(mState + "\r\n");
-								client.register(selector, SelectionKey.OP_WRITE);
-							} else if (event.equals(SOCKET_EVENT_LOGIN)) {
-								mState = STATE_CONNECTED;
-								System.out.println(mState + "\r\n");
-								client.register(selector, SelectionKey.OP_WRITE);
-							} else if (event.equals(SOCKET_EVENT_MESSAGE)) {
-								mState = STATE_UPDATE;
-								System.out.println(mState + "\r\n");
-								client.register(selector, SelectionKey.OP_WRITE);
-							} else if (event.equals(SOCKET_EVENT_COMMAND)) {
-								mState = STATE_UPDATE;
-								System.out.println(mState + "\r\n");
-								client.register(selector, SelectionKey.OP_WRITE);
-							}
-						} catch (JSONException e) {
-						}
+          break;
 
-					} else {
-						key.cancel();
-					}
+        case SelectionKey.OP_WRITE:
+          client = (SocketChannel) key.channel();
+          switch (mState) {
+          case STATE_LOGIN:
+            emit(SOCKET_REQUEST_LOGIN, "", client);
+            client.register(selector, SelectionKey.OP_READ);
+            break;
 
-					break;
+          case STATE_CONNECTED:
+            emit(SOCKET_EVENT_CONNECTED, "", client);
+            client.register(selector, SelectionKey.OP_READ);
+            break;
 
-				case SelectionKey.OP_WRITE:
-					client = (SocketChannel) key.channel();
-					switch (mState) {
-					case STATE_LOGIN:
-						emit(SOCKET_REQUEST_LOGIN, "", client);
-						client.register(selector, SelectionKey.OP_READ);
-						break;
+          case STATE_UPDATE:
+            emit(SOCKET_EVENT_UPDATE, "MANY DATA", client);
+            client.register(selector, SelectionKey.OP_READ);
+            break;
 
-					case STATE_CONNECTED:
-						emit(SOCKET_EVENT_CONNECTED, "", client);
-						client.register(selector, SelectionKey.OP_READ);
-						break;
+          default:
+            break;
+          }
 
-					case STATE_UPDATE:
-						emit(SOCKET_EVENT_UPDATE, "MANY DATA", client);
-						client.register(selector, SelectionKey.OP_READ);
-						break;
+          break;
 
-					default:
-						break;
-					}
+        default:
+          System.out.println("unhandled " + key.readyOps());
+          break;
+        }
+      }
+    }
+  }
 
-					break;
+  private static void emit(String event, Object data, SocketChannel client) {
+    JSONObject jso = new JSONObject();
+    try {
+      jso.put(SOCKET_EVENT, event);
+      jso.put(SOCKET_DATA, data);
+      try {
+        client.write(encoder.encode(CharBuffer.wrap(jso.toString() + "\r\n")));
 
-				default:
-					System.out.println("unhandled " + key.readyOps());
-					break;
-				}
-			}
-		}
-	}
+      } catch (CharacterCodingException e) {
+      } catch (IOException e) {
+      }
+    } catch (JSONException e) {
+    }
 
-	private static void emit(String event, Object data, SocketChannel client) {
-		JSONObject jso = new JSONObject();
-		try {
-			jso.put(SOCKET_EVENT, event);
-			jso.put(SOCKET_DATA, data);
-			try {
-				client.write(encoder.encode(CharBuffer.wrap(jso.toString()
-						+ "\r\n")));
-
-			} catch (CharacterCodingException e) {
-			} catch (IOException e) {
-			}
-		} catch (JSONException e) {
-		}
-
-	}
+  }
 
 }
