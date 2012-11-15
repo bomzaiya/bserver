@@ -17,6 +17,8 @@ import java.util.Iterator;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.bomzaiya.server.db.Member;
+
 public class IdangServer {
 
   private static final String SOCKET_REQUEST_CONNECTION = "SOCKET_REQUEST_CONNECTION";
@@ -46,12 +48,14 @@ public class IdangServer {
   public static Charset charset = Charset.forName("UTF-8");
   public static CharsetEncoder encoder = charset.newEncoder();
   public static CharsetDecoder decoder = charset.newDecoder();
-  private static boolean mNeedLogin;
+  private static Member mMember;
 
   @SuppressWarnings("static-access")
   public static void main(String[] args) throws IOException {
-    IdangServer IdangServer = new IdangServer();
-    IdangServer.Server();
+    mMember = new Member();
+    
+    IdangServer idangServer = new IdangServer();
+    idangServer.Server();
   }
 
   public static void Server() throws IOException {
@@ -94,6 +98,8 @@ public class IdangServer {
               String data = jsonObject.getString("data");
               System.out.println(event + ":" + data);
               if (event.equals(SOCKET_REQUEST_CONNECTION)) {
+                mMember.getMember();
+                
                 mState = STATE_LOGIN;
                 System.out.println(mState + "\r\n");
                 client.register(selector, SelectionKey.OP_WRITE);
@@ -166,5 +172,9 @@ public class IdangServer {
     }
 
   }
+  
+//  private void execSql() {
+// 
+//  }
 
 }
